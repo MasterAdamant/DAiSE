@@ -11,6 +11,19 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 
+# Build directories
+build/
+.cache/
+
+# Compiled binaries
+/Lab1/Lab1
+
+# Generated program output
+histogram_pass*.svg
+
+# Editor-local settings
+.vscode/
+
 # CLion
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

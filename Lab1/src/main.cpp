@@ -1,0 +1,150 @@
+//Containers
+#include <algorithm>
+#include <cstddef>
+#include <vector>
+#include <string>
+
+//File reading and logging
+#include <iostream>
+#include <fstream>
+
+//Math
+#include <cmath>
+#include "analysis.hpp"
+#include "formulas.hpp"
+
+std::vector<ldouble> ReadData(std::string filepath);
+void PrintValues(const std::string& caption, const std::vector<ldouble>& data);
+bool AnalyzeSample(const std::vector<ldouble>& data, ldouble significance, int pass);
+
+int main (int argc, char** argv) {
+    if (argc < 2) {
+        std::cout << "Please, specify file with data after starting command, for example:'[user]$ ./app data.txt'";
+        return 0;
+    }
+
+    // 0. Read numbers AND sort data
+    std::string arg {argv[1]};
+    auto data = ReadData(arg);
+    if (data.size() < 3) {
+        std::cout << "Not enough values to analyze.\n";
+        return 0;
+    }
+    std::sort(data.begin(), data.end());
+
+    ldouble significance = 0.05;
+
+    const std::size_t initial_size = data.size();
+
+    PrintValues("Input values:", data);
+
+    // Precalculate values, check normality, find trusted ranges
+    bool isNormal = AnalyzeSample(data, significance, 0);
+
+    // Censor the sample and repeat the analysis until nothing is dropped
+    for (int pass = 1; ; ++pass) {
+        std::cout << "\n=== Censoring, pass " << pass << " ===\n";
+
+        std::vector<ldouble> censored = censor_data(data, isNormal, significance);
+
+        std::size_t dropped = data.size() - censored.size();
+        std::cout << "Dropped values: " << dropped << "\n";
+
+        if (dropped == 0) {
+            std::cout << "No outliers left; analysis is finished.\n";
+            break;
+        }
+        if (censored.size() < 3) {
+            std::cout << "Too few values left after censoring; stopping.\n";
+            break;
+        }
+
+        data = std::move(censored);
+        PrintValues("Censored values:", data);
+
+        std::cout << "\n=== Repeated analysis of the censored sample ===\n";
+        isNormal = AnalyzeSample(data, significance, pass);
+    }
+
+    // 7. Conclusions.
+    std::cout << "\n=== Conclusions ===\n"
+    << "Values kept: " << data.size() << " of " << initial_size
+    << " (" << (initial_size - data.size()) << " discarded as outliers)\n"
+    << "Distribution law: " << (isNormal ? "may be considered normal"
+                                         : "cannot be considered normal")
+    << " at the " << double(100*significance) << "% significance level\n";
+}
+
+bool AnalyzeSample(const std::vector<ldouble>& data, ldouble significance, int pass) {
+    ldouble len = data.size();
+    ldouble avg = average(data);
+    ldouble variance = unbiased_point_estimate_of_variance(avg, data);
+    ldouble deviation = std::sqrt(variance);
+    ullong sections_count = sturges_formula(len);
+
+    ldouble t_quantile = student_quantile(significance/2, len-1);
+    std::pair<ldouble, ldouble> trusted_avg_range = trusted_average_range(len, avg, deviation, t_quantile);
+    std::pair<ldouble, ldouble> trusted_dev_range = trusted_deviation_range(len, deviation, significance);
+
+    std::cout << "Precalculation data: \n"
+    << "Average: " << double(avg) << '\n'
+    << "Variance: " << double(variance) << '\n'
+    << "Deviation: " << double(deviation) << '\n'
+    << "Sections count: " << sections_count << '\n';
+
+    write_histogram_svg(data, sections_count, "histogram_pass" + std::to_string(pass) + ".svg");
+
+    bool isNormal = gaussian_normality_check(data, significance);
+    if (isNormal) {
+        std::cout
+        << "Trusted average range: [" << double(trusted_avg_range.first) << "; " << double(trusted_avg_range.second) << "]\n"
+        << "Trusted deviation range: [" << double(trusted_dev_range.first) << "; " << double(trusted_dev_range.second) << "]\n";
+    }
+
+    return isNormal;
+}
+
+void PrintValues(const std::string& caption, const std::vector<ldouble>& data) {
+    std::cout << caption;
+    for (auto t : data) {
+        std::cout << " " << double(t);
+    }
+    std::cout << std::endl;
+}
+
+std::vector<ldouble> ReadData(std::string filepath) {
+    std::vector<ldouble> result {};
+
+    std::ifstream file {};
+    file.open(filepath);
+
+    if (!file.is_open())
+        return result;
+
+    std::string data {}, line {};
+    while (std::getline(file, line)) {
+        data += line + ' ';
+    }
+
+    std::size_t pos {0};
+    while (pos < data.size()){
+        auto ind = data.find(' ', pos);
+        if (ind==std::string::npos)
+            ind = data.length();
+        if (!(ind > pos)) {
+            ++pos;
+            continue;
+        }
+        auto number = data.substr(pos, ind-pos);
+
+        double value;
+        try {
+            value = std::stod(number);
+            result.push_back(value);
+        } catch (...) { }
+
+        pos = ind + 1;
+    }
+
+    return result;
+}

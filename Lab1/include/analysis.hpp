@@ -1,0 +1,24 @@
+#pragma once
+
+#include "formulas.hpp"
+#include <string>
+#include <vector>
+
+// Step 3: histogram of the sample with the fitted normal density drawn on it,
+// written as a standalone SVG file
+void write_histogram_svg(std::vector<ldouble> data, std::size_t sections_count,
+                         const std::string& filename);
+
+// Step 4: check whether the sample may be treated as Gaussian
+bool gaussian_normality_check(std::vector<ldouble> data, ldouble significance);
+
+// Step 6: censoring by Grubbs, assuming the data are Gaussian (formulas 1.1-1.2)
+std::vector<ldouble> censor_normalized_data(std::vector<ldouble> data, ldouble significance);
+
+// Step 6: censoring for non-Gaussian data via the Johnson normalizing
+// transformation (formulas 1.4-1.6); falls back to formula (1.3) when the
+// transformation cannot be fitted
+std::vector<ldouble> censor_non_gaussian_data(std::vector<ldouble> data, ldouble significance);
+
+// Dispatches to one of the two functions above
+std::vector<ldouble> censor_data(std::vector<ldouble> data, bool isNormal, ldouble significance);
