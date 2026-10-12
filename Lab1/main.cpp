@@ -6,26 +6,21 @@
 
 //File reading and logging
 #include <iostream>
-#include <fstream>
 
 //Math
 #include <cmath>
-#include "analysis.hpp"
 #include "formulas.hpp"
+#include "analysis.hpp"
+#include "data_reader.hpp"
 
-std::vector<ldouble> ReadData(std::string filepath);
 void PrintValues(const std::string& caption, const std::vector<ldouble>& data);
 bool AnalyzeSample(const std::vector<ldouble>& data, ldouble significance, int pass);
 
 int main (int argc, char** argv) {
-    if (argc < 2) {
-        std::cout << "Please, specify file with data after starting command, for example:'[user]$ ./app data.txt'";
-        return 0;
-    }
-
     // 0. Read numbers AND sort data
-    std::string arg {argv[1]};
-    auto data = ReadData(arg);
+    // Default to the data file next to the sources, independent of the working directory
+    std::string arg = (argc > 1) ? argv[1] : std::string(DATA_DIR) + "/data.txt";
+    auto data = DataReader::ReadVector<ldouble>(arg);
     if (data.size() < 3) {
         std::cout << "Not enough values to analyze.\n";
         return 0;
@@ -110,41 +105,4 @@ void PrintValues(const std::string& caption, const std::vector<ldouble>& data) {
         std::cout << " " << double(t);
     }
     std::cout << std::endl;
-}
-
-std::vector<ldouble> ReadData(std::string filepath) {
-    std::vector<ldouble> result {};
-
-    std::ifstream file {};
-    file.open(filepath);
-
-    if (!file.is_open())
-        return result;
-
-    std::string data {}, line {};
-    while (std::getline(file, line)) {
-        data += line + ' ';
-    }
-
-    std::size_t pos {0};
-    while (pos < data.size()){
-        auto ind = data.find(' ', pos);
-        if (ind==std::string::npos)
-            ind = data.length();
-        if (!(ind > pos)) {
-            ++pos;
-            continue;
-        }
-        auto number = data.substr(pos, ind-pos);
-
-        double value;
-        try {
-            value = std::stod(number);
-            result.push_back(value);
-        } catch (...) { }
-
-        pos = ind + 1;
-    }
-
-    return result;
 }

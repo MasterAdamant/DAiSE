@@ -1,4 +1,5 @@
 #include "formulas.hpp"
+#include "matrix.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -13,6 +14,30 @@ ldouble average(const std::vector<ldouble>& values) {
         sum += v;
     }
     return sum / values.size();
+}
+
+std::vector<ldouble> average_of_rows(const Matrix<ldouble>& matrix) {
+    std::vector<ldouble> result;
+    for (size_t i=0; i<matrix.rows_count(); ++i) {
+        ldouble avg {0};
+        for (size_t j=0; j<matrix.columns_count(); ++j) {
+            avg += matrix[i,j]/matrix.columns_count();
+        }
+        result.push_back(avg);
+    }
+    return result;
+}
+
+std::vector<ldouble> average_of_columns(const Matrix<ldouble>& matrix) {
+    std::vector<ldouble> result;
+    for (size_t i=0; i<matrix.columns_count(); ++i) {
+        ldouble avg {0};
+        for (size_t j=0; j<matrix.rows_count(); ++j) {
+            avg += matrix[j,i]/matrix.rows_count();
+        }
+        result.push_back(avg);
+    }
+    return result;
 }
 
 ldouble unbiased_point_estimate_of_variance(ldouble expected, const std::vector<ldouble>& values) {
@@ -31,11 +56,70 @@ ldouble biased_central_statistical_moment_estimate(ldouble expected, ullong orde
     return result;
 }
 
+Matrix<ldouble> biased_covariance_matrix(const Matrix<ldouble>& data) {
+    Matrix<ldouble> result {data.columns_count(), data.columns_count()};
+    Matrix<ldouble> avgs {{average_of_columns(data)}};
+    for (size_t i=0; i<data.rows_count(); ++i) {
+        auto raw = Matrix<ldouble>{{data.get_row(i)}} - avgs;
+        auto step = (*raw) * raw;
+        result += step/data.rows_count();
+    }
+    return result;
+}
+
+Matrix<ldouble> unbiased_covariance_matrix(const Matrix<ldouble>& data) {
+    Matrix<ldouble> result {data.columns_count(), data.columns_count()};
+    Matrix<ldouble> avgs {{average_of_columns(data)}};
+    for (size_t i=0; i<data.rows_count(); ++i) {
+        auto raw = Matrix<ldouble>{{data.get_row(i)}} - avgs;
+        auto step = (*raw) * raw;
+        result += step/(data.rows_count()-1);
+    }
+    return result;
+}
+
 ldouble gaussian_distribution_density(ldouble value, ldouble expected, ldouble sigma) {
     ldouble pow = std::pow(value - expected, 2)/(2*sigma*sigma);
     ldouble exp = std::exp(-pow);
     ldouble denom = sigma * std::sqrt(2*M_PI);
     return exp/denom;
+}
+
+Matrix<ldouble> mahalanobis_distance(const Matrix<ldouble> &data) {
+    const size_t n = data.rows_count();
+    Matrix<ldouble> result {n, n};
+    Matrix<ldouble> average {{average_of_columns(data)}};
+    Matrix<ldouble> inv_cov = biased_covariance_matrix(data).pow(-1);
+
+    // Отклонения считаем один раз, а не N² раз
+    std::vector<Matrix<ldouble>> d;
+    d.reserve(n);
+    for (size_t i = 0; i < n; ++i)
+        d.push_back(Matrix<ldouble>{{data.get_row(i)}} - average);
+
+    for (size_t i = 0; i < n; ++i)
+        for (size_t j = 0; j < n; ++j)
+            result[i,j] = (d[i] * inv_cov * (*d[j])).get(0, 0);
+    return result;
+}
+ldouble mardia_assymetry(const Matrix<ldouble>& data) {
+    const size_t n = data.rows_count();
+    // Squared Mahalanobis distances (Xi - X)^T S^-1 (Xj - X) between all pairs
+    Matrix<ldouble> distances = mahalanobis_distance(data);
+    ldouble sum {0};
+    for (size_t i = 0; i < n; ++i)
+        for (size_t j = 0; j < n; ++j)
+            sum += std::pow(distances[i,j], 3);
+    return sum/(ldouble(n)*n);
+}
+
+ldouble mardia_kurtosis(const Matrix<ldouble>& data) {
+    const size_t n = data.rows_count();
+    Matrix<ldouble> distances = mahalanobis_distance(data);
+    ldouble sum {0};
+    for (size_t i = 0; i < n; ++i)
+        sum += std::pow(distances[i,i], 2);
+    return sum/n;
 }
 
 ldouble sturges_formula(ldouble N) {
@@ -47,7 +131,7 @@ ldouble brooks_caruthers_formula(ldouble N) {
 }
 
 ldouble pearson_criteria(ldouble N, const std::vector<std::pair<ullong, ldouble>>& frequency_chance_pairs) {
-    ldouble result = 0;
+    ldouble result {};
     for (auto p : frequency_chance_pairs) {
         ldouble Np = N*p.second;
         if (Np <= 0) continue;
@@ -188,6 +272,11 @@ ldouble quiet_nan() {
 }
 
 } // namespace
+
+ldouble normal_quantile(ldouble probability) {
+    auto cdf = [](ldouble x) { return std::erfc(-x/std::sqrt(2.0L))/2; };
+    return invert_monotonic_cdf(cdf, probability, -1.0L, 1.0L);
+}
 
 ldouble pearson_criteria_critical(ldouble significance_level, ldouble degrees_of_freedom) {
     auto cdf = [degrees_of_freedom](ldouble x) { return chi_squared_cdf(x, degrees_of_freedom); };

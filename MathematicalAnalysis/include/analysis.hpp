@@ -22,3 +22,7 @@ std::vector<ldouble> censor_non_gaussian_data(std::vector<ldouble> data, ldouble
 
 // Dispatches to one of the two functions above
 std::vector<ldouble> censor_data(std::vector<ldouble> data, bool isNormal, ldouble significance);
+
+// Lab 2: check whether multivariate data (rows are observations, columns are
+// variables) deviate from the normal law using Mardia skewness and kurtosis
+bool mardia_normality_check(const Matrix<ldouble>& data, ldouble significance);

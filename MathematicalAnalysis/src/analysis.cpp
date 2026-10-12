@@ -2,13 +2,12 @@
 #include "formulas.hpp"
 #include <algorithm>
 #include <cmath>
-#include <cstddef>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
+#include <fstream>
 #include <string>
-#include <vector>
 
 namespace {
 
@@ -421,4 +420,61 @@ std::vector<ldouble> censor_data(std::vector<ldouble> data, bool isNormal, ldoub
     return isNormal
          ? censor_normalized_data(std::move(data), significance)
          : censor_non_gaussian_data(std::move(data), significance);
+}
+
+bool mardia_normality_check(const Matrix<ldouble>& data, ldouble significance) {
+    const std::size_t n = data.rows_count();
+    const std::size_t k = data.columns_count();
+    if (n <= k || k == 0) {
+        std::cout << "Not enough observations (" << n << ") for " << k << " variables.\n";
+        return false;
+    }
+
+    ldouble beta1 {}, beta2 {};
+    try {
+        beta1 = mardia_assymetry(data);
+        beta2 = mardia_kurtosis(data);
+    } catch (const std::domain_error&) {
+        std::cout << "Covariance matrix is singular (variables are linearly dependent); "
+                     "Mardia test is not applicable.\n";
+        return false;
+    }
+
+    const ldouble N = static_cast<ldouble>(n);
+    const ldouble K = static_cast<ldouble>(k);
+
+    // Skewness: N/6 * beta1 ~ chi^2 with k(k+1)(k+2)/6 degrees of freedom
+    ldouble skewness_statistic = N/6*beta1;
+    ldouble freedom_degree = K*(K + 1)*(K + 2)/6;
+    ldouble skewness_border = pearson_criteria_critical(significance, freedom_degree);
+
+    // Kurtosis: beta2 ~ N(k(k+2), 8k(k+2)/N), compare with the 1-alpha quantile
+    ldouble kurtosis_expected = K*(K + 2);
+    ldouble kurtosis_deviation = std::sqrt(8*K*(K + 2)/N);
+    ldouble kurtosis_border = kurtosis_expected + kurtosis_deviation*normal_quantile(1 - significance);
+
+    bool skewness_rejected = skewness_statistic > skewness_border;
+    bool kurtosis_rejected = beta2 > kurtosis_border;
+
+    std::cout << "Checking multivariate normality hypothesis using Mardia measures:\n"
+    << "Size of sample (N): " << n << "\n"
+    << "Variables count (k): " << k << "\n"
+    << "Skewness (beta1): " << double(beta1) << " (expected 0)\n"
+    << "Skewness statistic (N/6*beta1): " << double(skewness_statistic) << "\n"
+    << "Freedom degree (k(k+1)(k+2)/6): " << double(freedom_degree) << "\n"
+    << "Skewness border (chi^2): " << double(skewness_border) << "\n"
+    << "Kurtosis (beta2): " << double(beta2) << " (expected " << double(kurtosis_expected) << ")\n"
+    << "Kurtosis border (z): " << double(kurtosis_border) << "\n"
+    << "Skewness test: " << (skewness_rejected ? "REJECTED" : "NOT REJECTED") << "\n"
+    << "Kurtosis test: " << (kurtosis_rejected ? "REJECTED" : "NOT REJECTED") << "\n";
+
+    bool isNormal = !skewness_rejected && !kurtosis_rejected;
+    if (isNormal) {
+        std::cout << "Hypothesis of multivariate normal data is NOT REJECTED at the "
+                  << double(100*significance) << "% significance level.\n";
+    } else {
+        std::cout << "Hypothesis of multivariate normal data is REJECTED at the "
+                  << double(100*significance) << "% significance level.\n";
+    }
+    return isNormal;
 }

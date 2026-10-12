@@ -4,22 +4,38 @@
 #include <utility>
 #include <vector>
 
+#include "matrix.hpp"
+
 using ldouble = long double;
 using ullong = unsigned long long;
 
 // Basic characteristics of sample
 ldouble average(const std::vector<ldouble>& values);
+std::vector<ldouble> average_of_rows(const Matrix<ldouble>& matrix);
+std::vector<ldouble> average_of_columns(const Matrix<ldouble>& matrix);
 ldouble unbiased_point_estimate_of_variance(ldouble expected, const std::vector<ldouble>& values);
 ldouble biased_central_statistical_moment_estimate(ldouble expected, ullong order, const std::vector<ldouble>& values);
+Matrix<ldouble> biased_covariance_matrix(const Matrix<ldouble>& data);
+Matrix<ldouble> unbiased_covariance_matrix(const Matrix<ldouble>& data);
 
 // How fast CDF values-gaining-speed grows
 ldouble gaussian_distribution_density(ldouble value, ldouble expected, ldouble sigma);
+
+// Are values of the same Matrix collinear to each other
+Matrix<ldouble> mahalanobis_distance(const Matrix<ldouble>& data);
+// Squared Mahalanobis distances (Xi - X)^T S^-1 (Xj - X), S is the biased covariance matrix
+// Mardia multivariate skewness (2.1) and kurtosis (2.2)
+ldouble mardia_assymetry(const Matrix<ldouble>& data);
+ldouble mardia_kurtosis(const Matrix<ldouble>& data);
 
 // Get X2 by evaluating "rate" of random value insertion and compare whether it exceeds limit or not
 ldouble sturges_formula(ldouble N);
 ldouble brooks_caruthers_formula(ldouble N);
 ldouble pearson_criteria(ldouble N, const std::vector<std::pair<ullong, ldouble>>& frequency_chance_pairs);
 ldouble pearson_criteria_critical(ldouble significance_level, ldouble degrees_of_freedom);
+
+// Quantile of the standard normal law: x such that P(Z <= x) = probability
+ldouble normal_quantile(ldouble probability);
 
 // Compare real value distribution to expected
 ldouble real_cumulative_distribution_function(const std::vector<ldouble>& data, ldouble value);

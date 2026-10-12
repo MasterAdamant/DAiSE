@@ -15,9 +15,6 @@ CMakeUserPresets.json
 build/
 .cache/
 
-# Compiled binaries
-/Lab1/Lab1
-
 # Generated program output
 histogram_pass*.svg
 
