@@ -34,6 +34,9 @@ ldouble brooks_caruthers_formula(ldouble N);
 ldouble pearson_criteria(ldouble N, const std::vector<std::pair<ullong, ldouble>>& frequency_chance_pairs);
 ldouble pearson_criteria_critical(ldouble significance_level, ldouble degrees_of_freedom);
 
+// Upper quantile of the F distribution: x such that P(F > x) = significance_level
+ldouble fisher_quantile(ldouble significance_level, ldouble d1, ldouble d2);
+
 // Quantile of the standard normal law: x such that P(Z <= x) = probability
 ldouble normal_quantile(ldouble probability);
 
@@ -77,3 +80,21 @@ const char* johnson_family_name(johnson_family family);
 johnson_parameters fit_johnson(std::vector<ldouble> data, ldouble z = 0.524L);
 ldouble johnson_transform(ldouble x, const johnson_parameters& jp);
 ldouble johnson_inverse_transform(ldouble z, const johnson_parameters& jp);
+
+// Lab 3: squared Mahalanobis distance of every row to the mean, d_i^2 = (Zi - Z)^T S^-1 (Zi - Z),
+// S is the biased covariance matrix (formula 3.9)
+std::vector<ldouble> squared_mahalanobis_distances(const Matrix<ldouble>& data);
+
+// Box-Cox transformation (3.6) of a single value
+ldouble box_cox_transform(ldouble x, ldouble lambda);
+
+// Multivariate Box-Cox: log-likelihood (3.8) for the vector of parameters lambda
+// (one per column); -infinity when the data are not positive or S is degenerate
+ldouble box_cox_log_likelihood(const Matrix<ldouble>& data, const std::vector<ldouble>& lambdas);
+
+// Maximum likelihood estimate of the parameters lambda; empty when the data
+// contain non-positive values and the transformation is not defined
+std::vector<ldouble> fit_box_cox(const Matrix<ldouble>& data);
+
+// Applies (3.6) column by column
+Matrix<ldouble> apply_box_cox(const Matrix<ldouble>& data, const std::vector<ldouble>& lambdas);

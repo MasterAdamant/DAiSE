@@ -12,3 +12,5 @@ target_link_libraries(Lab1 PRIVATE MathAnLib)
 
 add_subdirectory(Lab2)
 target_link_libraries(Lab2 PRIVATE MathAnLib)
+add_subdirectory(Lab3)
+target_link_libraries(Lab3 PRIVATE MathAnLib)

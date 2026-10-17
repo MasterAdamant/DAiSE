@@ -17,6 +17,7 @@ build/
 
 # Generated program output
 histogram_pass*.svg
+scatter_*.svg
 
 # Editor-local settings
 .vscode/

@@ -283,6 +283,14 @@ ldouble pearson_criteria_critical(ldouble significance_level, ldouble degrees_of
     return invert_monotonic_cdf(cdf, 1 - significance_level, 0.0L, 1.0L);
 }
 
+ldouble fisher_quantile(ldouble significance_level, ldouble d1, ldouble d2) {
+    auto cdf = [d1, d2](ldouble x) {
+        if (x <= 0) return ldouble{0};
+        return regularized_incomplete_beta(d1*x/(d1*x + d2), d1/2, d2/2);
+    };
+    return invert_monotonic_cdf(cdf, 1 - significance_level, 0.0L, 1.0L);
+}
+
 ldouble real_cumulative_distribution_function(const std::vector<ldouble>& data, ldouble value) {
     ldouble result = 0;
     for (auto v : data) {
@@ -494,4 +502,92 @@ ldouble johnson_inverse_transform(ldouble z, const johnson_parameters& jp) {
         default: // SB
             return jp.epsilon + jp.lambda/(1 + std::exp(-u));
     }
+}
+
+
+std::vector<ldouble> squared_mahalanobis_distances(const Matrix<ldouble>& data) {
+    const size_t n = data.rows_count();
+    Matrix<ldouble> average {{average_of_columns(data)}};
+    Matrix<ldouble> inv_cov = biased_covariance_matrix(data).inverse();
+
+    std::vector<ldouble> result;
+    result.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        Matrix<ldouble> d = Matrix<ldouble>{{data.get_row(i)}} - average;
+        result.push_back((d * inv_cov * (*d)).get(0, 0));
+    }
+    return result;
+}
+
+ldouble box_cox_transform(ldouble x, ldouble lambda) {
+    if (lambda == 0) return std::log(x);
+    return (std::pow(x, lambda) - 1)/lambda;
+}
+
+Matrix<ldouble> apply_box_cox(const Matrix<ldouble>& data, const std::vector<ldouble>& lambdas) {
+    Matrix<ldouble> result {data.rows_count(), data.columns_count()};
+    for (size_t i = 0; i < data.rows_count(); ++i)
+        for (size_t j = 0; j < data.columns_count(); ++j)
+            result[i, j] = box_cox_transform(data[i, j], lambdas[j]);
+    return result;
+}
+
+ldouble box_cox_log_likelihood(const Matrix<ldouble>& data, const std::vector<ldouble>& lambdas) {
+    constexpr ldouble impossible {-std::numeric_limits<ldouble>::infinity()};
+    const size_t n = data.rows_count();
+
+    ldouble sum {0};
+    for (size_t j = 0; j < data.columns_count(); ++j) {
+        ldouble log_sum {0};
+        for (size_t i = 0; i < n; ++i) {
+            if (data[i, j] <= 0) return impossible;
+            log_sum += std::log(data[i, j]);
+        }
+        sum += (lambdas[j] - 1)*log_sum;
+    }
+
+    ldouble det = biased_covariance_matrix(apply_box_cox(data, lambdas)).determinant();
+    if (!(det > 0) || !std::isfinite(det)) return impossible;
+    return sum - static_cast<ldouble>(n)/2*std::log(det);
+}
+
+std::vector<ldouble> fit_box_cox(const Matrix<ldouble>& data) {
+    const size_t k = data.columns_count();
+    for (size_t i = 0; i < data.rows_count(); ++i)
+        for (size_t j = 0; j < k; ++j)
+            if (data[i, j] <= 0) return {};
+
+    constexpr ldouble lower {-5}, upper {5};
+    const ldouble phi {(std::sqrt(5.0L) - 1)/2};
+    std::vector<ldouble> lambdas(k, 1.0L);
+
+    // Coordinate-wise golden section search; the likelihood is smooth in each
+    // parameter, so sweeping over the parameters until they settle is enough
+    for (int sweep = 0; sweep < 50; ++sweep) {
+        ldouble moved {0};
+        for (size_t j = 0; j < k; ++j) {
+            auto value = [&](ldouble l) {
+                std::vector<ldouble> trial = lambdas;
+                trial[j] = l;
+                return box_cox_log_likelihood(data, trial);
+            };
+            ldouble a {lower}, b {upper};
+            ldouble c {b - phi*(b - a)}, d {a + phi*(b - a)};
+            ldouble fc {value(c)}, fd {value(d)};
+            for (int it = 0; it < 80; ++it) {
+                if (fc > fd) {
+                    b = d; d = c; fd = fc;
+                    c = b - phi*(b - a); fc = value(c);
+                } else {
+                    a = c; c = d; fc = fd;
+                    d = a + phi*(b - a); fd = value(d);
+                }
+            }
+            ldouble best = (a + b)/2;
+            moved = std::max(moved, std::abs(best - lambdas[j]));
+            lambdas[j] = best;
+        }
+        if (moved < 1e-9L) break;
+    }
+    return lambdas;
 }

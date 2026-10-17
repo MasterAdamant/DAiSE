@@ -26,3 +26,18 @@ std::vector<ldouble> censor_data(std::vector<ldouble> data, bool isNormal, ldoub
 // Lab 2: check whether multivariate data (rows are observations, columns are
 // variables) deviate from the normal law using Mardia skewness and kurtosis
 bool mardia_normality_check(const Matrix<ldouble>& data, ldouble significance);
+
+
+// Lab 3: Hotelling confidence ellipsoid of the sample means
+// (X - m)^T S^-1 (X - m) <= k(N-1)/(N(N-k)) * F; prints the bound, the
+// confidence interval of each mean (projection of the ellipsoid) and, for
+// bivariate data, the semi-axes of the ellipse
+void print_confidence_ellipsoid(const Matrix<ldouble>& data, ldouble significance);
+
+// Right-hand side of the prediction ellipsoid equation (3.10): k(N^2-1)/(N(N-k)) * F
+ldouble prediction_ellipsoid_border(std::size_t N, std::size_t k, ldouble significance);
+
+// Bivariate data as a scatter plot with the confidence ellipse of the means and
+// the prediction ellipse; the row `flagged` (if any) is highlighted as an outlier
+void write_scatter_svg(const Matrix<ldouble>& data, std::size_t flagged, ldouble significance,
+                       const std::string& title, const std::string& filename);
