@@ -1,4 +1,5 @@
 //Containers
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -93,6 +94,14 @@ bool SignificanceTests(const linear_regression& model, std::size_t k, ldouble si
               << "F0 = " << double(f) << ", F(" << double(significance) << ", " << double(kk) << ", "
               << double(freedom) << ") = " << double(f_border) << " -> H0: b1 = ... = bk = 0 "
               << (regression_significant ? "REJECTED: the linear dependence exists" : "NOT REJECTED") << "\n";
+
+    // For one factor T0^2 = b1^2*Sxx/sigma^2 = SSR/MSE = F0 and t(alpha/2, N-2)^2 = F(alpha, 1, N-2),
+    // so the T-test of b1 and the F-test always give the same verdict
+    if (k == 1) {
+        ldouble t1 = model.coefficients[1]/model.standard_errors[1];
+        std::cout << "Relation of the tests: T0(b1)^2 = " << double(t1*t1) << ", F0 = " << double(f)
+                  << "; t^2 = " << double(t_border*t_border) << ", F border = " << double(f_border) << "\n";
+    }
     return regression_significant && slopes_significant;
 }
 
@@ -178,10 +187,34 @@ int main(int argc, char** argv) {
     }
     std::cout << "(* marks MRE > 0.25)\n";
 
+    // Characteristics of the deviations: the mean must be zero for the least squares
+    // estimate with an intercept, sigma^2 = SSE/(N-k-1) estimates the variance of the error
+    {
+        const std::vector<ldouble>& e = model.residuals;
+        ldouble avg = average(e);
+        ldouble sigma = std::sqrt(model.sse/static_cast<ldouble>(e.size() - k - 1));
+        ldouble s = std::sqrt(biased_central_statistical_moment_estimate(avg, 2, e));
+        ldouble skewness = biased_central_statistical_moment_estimate(avg, 3, e)/std::pow(s, 3);
+        ldouble excess = biased_central_statistical_moment_estimate(avg, 4, e)/std::pow(s, 4) - 3;
+        auto [lo, hi] = std::minmax_element(e.begin(), e.end());
+        std::size_t positive = 0, far = 0;
+        for (auto v : e) {
+            if (v > 0) ++positive;
+            if (std::abs(v) > 2*sigma) ++far;
+        }
+        std::cout << "Sum of deviations: " << double(avg*e.size()) << "\n"
+                  << "SSE (sum of squared deviations): " << double(model.sse) << "\n"
+                  << "Standard deviation sigma = sqrt(SSE/(N-k-1)): " << double(sigma) << "\n"
+                  << "Min / max deviation: " << double(*lo) << " / " << double(*hi) << "\n"
+                  << "Positive / negative deviations: " << positive << " / " << e.size() - positive << "\n"
+                  << "Skewness: " << double(skewness) << ", excess: " << double(excess) << " (0 and 0 for the normal law)\n"
+                  << "Deviations with |e| > 2*sigma: " << far << "\n";
+    }
+
     // 6. Normality of the deviations with confidence probability 0.95
     std::cout << "\n=== 6. Normality of the deviations ===\n";
     std::cout << "Average of deviations: " << double(average(model.residuals)) << "\n";
-    bool residuals_normal = gaussian_normality_check(model.residuals, significance);
+    bool residuals_normal = gaussian_normality_check(model.residuals, significance, true);
     write_histogram_svg(model.residuals, static_cast<std::size_t>(sturges_formula(model.residuals.size())),
                         "residuals_histogram.svg");
 

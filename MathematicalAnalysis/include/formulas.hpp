@@ -126,3 +126,11 @@ ldouble percentage_of_prediction(const std::vector<ldouble>& mre, ldouble level)
 // Variance inflation factors of the columns of x: diagonal of the inverse
 // correlation matrix of the factors, VIF_j = 1/(1 - R_j^2)
 std::vector<ldouble> variance_inflation_factors(const Matrix<ldouble>& x);
+
+// Lab 5: inverse of the Box-Cox transformation (3.6), x = (lambda*z + 1)^(1/lambda);
+// NaN when lambda*z + 1 is not positive and the inverse is undefined
+ldouble box_cox_inverse_transform(ldouble z, ldouble lambda);
+
+// Coefficient of determination (4.6) of arbitrary predictions, e.g. of a
+// nonlinear equation in the original scale; undefined predictions are skipped
+ldouble determination_coefficient(const std::vector<ldouble>& y, const std::vector<ldouble>& predicted);

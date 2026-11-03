@@ -694,3 +694,22 @@ std::vector<ldouble> variance_inflation_factors(const Matrix<ldouble>& x) {
     }
     return result;
 }
+
+ldouble box_cox_inverse_transform(ldouble z, ldouble lambda) {
+    if (lambda == 0) return std::exp(z);
+    ldouble base = lambda*z + 1;
+    if (base <= 0) return quiet_nan();
+    return std::pow(base, 1/lambda);
+}
+
+ldouble determination_coefficient(const std::vector<ldouble>& y, const std::vector<ldouble>& predicted) {
+    ldouble avg = average(y);
+    ldouble sse {0}, sst {0};
+    for (size_t i = 0; i < y.size() && i < predicted.size(); ++i) {
+        sst += (y[i] - avg)*(y[i] - avg);
+        if (std::isnan(predicted[i])) continue;
+        sse += (y[i] - predicted[i])*(y[i] - predicted[i]);
+    }
+    if (sst == 0) return quiet_nan();
+    return 1 - sse/sst;
+}

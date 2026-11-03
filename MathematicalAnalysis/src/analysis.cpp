@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <fstream>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -195,7 +196,7 @@ void write_histogram_svg(std::vector<ldouble> data, std::size_t sections_count,
     std::cout << "Histogram written to " << filename << "\n";
 }
 
-bool gaussian_normality_check(std::vector<ldouble> data, ldouble significance) {
+bool gaussian_normality_check(std::vector<ldouble> data, ldouble significance, bool merge_sparse_intervals) {
     bool isNormal {false};
 
     std::sort(data.begin(), data.end());
@@ -240,6 +241,63 @@ bool gaussian_normality_check(std::vector<ldouble> data, ldouble significance) {
             ldouble chance = high_cdf - low_cdf;
 
             frequency_chance_pairs.push_back({counter, chance});
+        }
+
+        if (merge_sparse_intervals) {
+            // Table of the intervals; the outer ones are stretched to infinity
+            std::cout << "Intervals of the Pearson criteria:\n"
+                      << std::setw(4) << "j" << std::setw(24) << "interval" << std::setw(8) << "n_j"
+                      << std::setw(12) << "N*p_j" << "\n";
+            for (std::size_t j = 0; j < sections_count; ++j) {
+                std::ostringstream range;
+                range << (j == 0 ? std::string("-inf") : number_to_text(min + delta*j, 3)) << "; "
+                      << (j == sections_count - 1 ? std::string("+inf") : number_to_text(min + delta*(j+1), 3));
+                std::cout << std::setw(4) << j + 1 << std::setw(24) << range.str()
+                          << std::setw(8) << frequency_chance_pairs[j].first << std::setw(12)
+                          << number_to_text(data.size()*frequency_chance_pairs[j].second, 3) << "\n";
+            }
+
+            // Neighbouring intervals are joined until the expected count is at least 5;
+            // a sparse tail is joined to the last full group
+            std::vector<std::pair<ullong, ldouble>> merged {};
+            std::vector<std::string> names {};
+            std::string current_name {};
+            std::pair<ullong, ldouble> current {0, 0};
+            for (std::size_t j = 0; j < sections_count; ++j) {
+                current.first += frequency_chance_pairs[j].first;
+                current.second += frequency_chance_pairs[j].second;
+                current_name += (current_name.empty() ? "" : "+") + std::to_string(j + 1);
+                if (data.size()*current.second >= 5) {
+                    merged.push_back(current);
+                    names.push_back(current_name);
+                    current = {0, 0};
+                    current_name.clear();
+                }
+            }
+            if (!current_name.empty()) {
+                if (merged.empty()) {
+                    merged.push_back(current);
+                    names.push_back(current_name);
+                } else {
+                    merged.back().first += current.first;
+                    merged.back().second += current.second;
+                    names.back() += "+" + current_name;
+                }
+            }
+
+            if (merged.size() != frequency_chance_pairs.size()) {
+                std::cout << "Intervals with the expected count below 5 are joined:\n";
+                for (std::size_t g = 0; g < merged.size(); ++g)
+                    std::cout << "  group " << g + 1 << " (intervals " << names[g] << "): n = " << merged[g].first
+                              << ", N*p = " << number_to_text(data.size()*merged[g].second, 3) << "\n";
+                frequency_chance_pairs = merged;
+                sections_count = merged.size();
+                freedom_degree = static_cast<ldouble>(sections_count) - 3;
+            }
+            if (freedom_degree < 1) {
+                std::cout << "Too few intervals are left after joining; Pearson criteria is not applicable.\n";
+                return false;
+            }
         }
 
         ldouble pc = pearson_criteria(data.size(), frequency_chance_pairs);
@@ -659,14 +717,30 @@ void write_scatter_svg(const Matrix<ldouble>& data, std::size_t flagged, ldouble
     std::cout << "Scatter plot written to " << filename << "\n";
 }
 
-void write_regression_svg(const std::vector<ldouble>& x, const std::vector<ldouble>& y,
-                          ldouble b0, ldouble b1, const std::string& filename) {
+void write_regression_curve_svg(const std::vector<ldouble>& x, const std::vector<ldouble>& y,
+                                const std::function<ldouble(ldouble)>& predict,
+                                const std::string& equation, const std::string& filename) {
     const std::size_t n = std::min(x.size(), y.size());
     if (n < 2) return;
 
     auto [x_lo, x_hi] = std::minmax_element(x.begin(), x.begin() + n);
     ldouble xmin = *x_lo, xmax = *x_hi;
-    ldouble ymin = std::min(b0 + b1*xmin, b0 + b1*xmax), ymax = std::max(b0 + b1*xmin, b0 + b1*xmax);
+
+    // The curve is sampled over the observed range of X only; points where
+    // the equation is undefined are left out
+    constexpr int curve_points = 240;
+    std::vector<std::pair<ldouble, ldouble>> curve;
+    for (int i = 0; i <= curve_points; ++i) {
+        ldouble v = xmin + (xmax - xmin)*i/curve_points;
+        ldouble fitted = predict(v);
+        if (std::isfinite(fitted)) curve.push_back({v, fitted});
+    }
+
+    ldouble ymin = y[0], ymax = y[0];
+    for (auto [v, fitted] : curve) {
+        ymin = std::min(ymin, fitted);
+        ymax = std::max(ymax, fitted);
+    }
     for (std::size_t i = 0; i < n; ++i) {
         ymin = std::min(ymin, y[i]);
         ymax = std::max(ymax, y[i]);
@@ -714,8 +788,7 @@ void write_regression_svg(const std::vector<ldouble>& x, const std::vector<ldoub
     svg << "<text class=\"ink\" x=\"" << double(pad_left) << "\" y=\"30\" font-size=\"17\" "
            "font-weight=\"600\">Empirical data and the regression line</text>\n";
     svg << "<text class=\"ink2\" x=\"" << double(pad_left) << "\" y=\"50\" font-size=\"12.5\">N = " << n
-        << ",  Y = " << number_to_text(b0, 4) << (b1 < 0 ? " - " : " + ")
-        << number_to_text(std::abs(b1), 6) << " X</text>\n";
+        << ",  " << equation << "</text>\n";
 
     // Gridlines with the scales of both axes
     ldouble x_step = nice_step(xmax - xmin, 8), y_step = nice_step(ymax - ymin, 6);
@@ -739,9 +812,10 @@ void write_regression_svg(const std::vector<ldouble>& x, const std::vector<ldoub
             << "\" r=\"3.5\"/>\n";
     }
 
-    // The line is drawn over the observed range of X only
-    svg << "<line class=\"line\" x1=\"" << double(to_x(*x_lo)) << "\" y1=\"" << double(to_y(b0 + b1*(*x_lo)))
-        << "\" x2=\"" << double(to_x(*x_hi)) << "\" y2=\"" << double(to_y(b0 + b1*(*x_hi))) << "\"/>\n";
+    svg << "<path class=\"line\" d=\"";
+    for (std::size_t i = 0; i < curve.size(); ++i)
+        svg << (i == 0 ? "M" : "L") << double(to_x(curve[i].first)) << " " << double(to_y(curve[i].second));
+    svg << "\"/>\n";
 
     svg << "<text class=\"ink2\" x=\"" << double(pad_left + plot_width/2) << "\" y=\"" << double(height - 26)
         << "\" font-size=\"12\" text-anchor=\"middle\">X1</text>\n";
@@ -762,4 +836,11 @@ void write_regression_svg(const std::vector<ldouble>& x, const std::vector<ldoub
     svg << "</svg>\n";
     svg.close();
     std::cout << "Regression plot written to " << filename << "\n";
+}
+
+void write_regression_svg(const std::vector<ldouble>& x, const std::vector<ldouble>& y,
+                          ldouble b0, ldouble b1, const std::string& filename) {
+    std::string equation = "Y = " + number_to_text(b0, 4) + (b1 < 0 ? " - " : " + ")
+                         + number_to_text(std::abs(b1), 6) + " X";
+    write_regression_curve_svg(x, y, [b0, b1](ldouble v) { return b0 + b1*v; }, equation, filename);
 }

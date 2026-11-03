@@ -1,6 +1,7 @@
 #pragma once
 
 #include "formulas.hpp"
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -9,8 +10,11 @@
 void write_histogram_svg(std::vector<ldouble> data, std::size_t sections_count,
                          const std::string& filename);
 
-// Step 4: check whether the sample may be treated as Gaussian
-bool gaussian_normality_check(std::vector<ldouble> data, ldouble significance);
+// Step 4: check whether the sample may be treated as Gaussian; with
+// merge_sparse_intervals the Pearson intervals are printed and those with the
+// expected count below 5 are joined with their neighbours
+bool gaussian_normality_check(std::vector<ldouble> data, ldouble significance,
+                              bool merge_sparse_intervals = false);
 
 // Step 6: censoring by Grubbs, assuming the data are Gaussian (formulas 1.1-1.2)
 std::vector<ldouble> censor_normalized_data(std::vector<ldouble> data, ldouble significance);
@@ -45,3 +49,9 @@ void write_scatter_svg(const Matrix<ldouble>& data, std::size_t flagged, ldouble
 // Lab 4: empirical data of a one-factor regression with the line Y = b0 + b1 X drawn over them
 void write_regression_svg(const std::vector<ldouble>& x, const std::vector<ldouble>& y,
                           ldouble b0, ldouble b1, const std::string& filename);
+
+// Lab 5: empirical data with the curve Y = predict(X) of a nonlinear regression;
+// `equation` is printed under the title
+void write_regression_curve_svg(const std::vector<ldouble>& x, const std::vector<ldouble>& y,
+                                const std::function<ldouble(ldouble)>& predict,
+                                const std::string& equation, const std::string& filename);
