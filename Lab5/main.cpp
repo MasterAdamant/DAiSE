@@ -1,4 +1,5 @@
 //Containers
+#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -51,6 +52,30 @@ Quality Evaluate(const std::vector<ldouble>& y, const std::vector<ldouble>& pred
             percentage_of_prediction(mre, 0.25L)};
 }
 
+// Characteristics of the deviations: the mean must be zero for the least squares
+// estimate with an intercept, sigma^2 = SSE/(N-2) estimates the variance of the error
+void PrintDeviationCharacteristics(const linear_regression& model) {
+    const std::vector<ldouble>& e = model.residuals;
+    ldouble avg = average(e);
+    ldouble sigma = std::sqrt(model.sse/static_cast<ldouble>(e.size() - 2));
+    ldouble s = std::sqrt(biased_central_statistical_moment_estimate(avg, 2, e));
+    ldouble skewness = biased_central_statistical_moment_estimate(avg, 3, e)/std::pow(s, 3);
+    ldouble excess = biased_central_statistical_moment_estimate(avg, 4, e)/std::pow(s, 4) - 3;
+    auto [lo, hi] = std::minmax_element(e.begin(), e.end());
+    std::size_t positive = 0, far = 0;
+    for (auto v : e) {
+        if (v > 0) ++positive;
+        if (std::abs(v) > 2*sigma) ++far;
+    }
+    std::cout << "Sum of deviations: " << double(avg*e.size()) << "\n"
+              << "SSE (sum of squared deviations): " << double(model.sse) << "\n"
+              << "Standard deviation sigma = sqrt(SSE/(N-2)): " << double(sigma) << "\n"
+              << "Min / max deviation: " << double(*lo) << " / " << double(*hi) << "\n"
+              << "Positive / negative deviations: " << positive << " / " << e.size() - positive << "\n"
+              << "Skewness: " << double(skewness) << ", excess: " << double(excess) << " (0 and 0 for the normal law)\n"
+              << "Deviations with |e| > 2*sigma: " << far << "\n";
+}
+
 void PrintQuality(const Quality& q) {
     std::cout << "R^2 = " << double(q.r2) << (q.r2 > 0.75L ? " (acceptable, > 0.75)" : " (NOT acceptable, <= 0.75)") << "\n"
               << "MMRE = " << double(q.mmre) << (q.mmre <= 0.25L ? " (acceptable, <= 0.25)" : " (NOT acceptable, > 0.25)") << "\n"
@@ -99,6 +124,8 @@ NonlinearResult Analyze(const std::vector<ldouble>& x, const std::vector<ldouble
         std::cout << std::setw(4) << i + 1 << std::setw(13) << double(z[i, 0]) << std::setw(13) << double(zy[i])
                   << std::setw(13) << double(model.predicted[i]) << std::setw(13) << double(model.residuals[i]) << "\n";
     }
+
+    PrintDeviationCharacteristics(model);
 
     // 5. Normality of the deviations with confidence probability 0.95
     std::cout << "\n--- 5. Normality of the deviations ---\n"
@@ -173,6 +200,9 @@ int main(int argc, char** argv) {
     Quality linear_quality = Evaluate(y, linear.predicted);
     std::string linear_equation = "Y^ = " + Number(linear.coefficients[0]) + " + "
                                 + Number(linear.coefficients[1]) + "*X1";
+    std::cout << "\n=== Linear equation of work 4 (for the comparison) ===\n" << linear_equation << "\n";
+    PrintQuality(linear_quality);
+    bool linear_normal = gaussian_normality_check(linear.residuals, 0.05L, true);
 
     // 1. Candidate transformations, tried in this order: the decimal logarithm (5.5)-(5.6)
     // and, for the independent work, the bivariate Box-Cox transformation (3.6) with
@@ -224,7 +254,7 @@ int main(int argc, char** argv) {
               << std::setw(16) << "Normal dev." << "\n";
     std::cout << std::left << std::setw(48) << "linear (work 4)" << std::right << std::fixed << std::setprecision(4)
               << std::setw(10) << double(linear_quality.r2) << std::setw(10) << double(linear_quality.mmre)
-              << std::setw(12) << double(linear_quality.pred) << std::setw(16) << "no" << "\n";
+              << std::setw(12) << double(linear_quality.pred) << std::setw(16) << (linear_normal ? "yes" : "no") << "\n";
     for (const auto& r : results) {
         std::cout << std::left << std::setw(48) << ("nonlinear, " + r.name) << std::right
                   << std::setw(10) << double(r.quality.r2) << std::setw(10) << double(r.quality.mmre)
